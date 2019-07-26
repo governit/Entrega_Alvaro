@@ -3,7 +3,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 
-import com.sun.org.apache.xalan.internal.utils.FeatureManager.Feature;
 
 import es.us.isa.FAMA.Reasoner.QuestionTrader;
 import es.us.isa.FAMA.Reasoner.questions.NumberOfProductsQuestion;

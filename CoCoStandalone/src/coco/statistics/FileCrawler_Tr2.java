@@ -100,10 +100,15 @@ static double perc;
 			}
 			String ruta_json = "";
 			String ruta_alterna = "";
-
+			String extension="";
+			if(tipo_entrada == 1) {
+				extension = ".afm";
+			}else {
+				extension = ".afm2coco";
+			}
 			for (int i = 0; i < subFiles.length; i++) {
 
-				if (subFiles[i].getName().toLowerCase().contains(".afm2coco") ) {//&& !subFiles[i].getName().toLowerCase().contains("2coco")) {
+				if (subFiles[i].getName().toLowerCase().contains(extension) ) {//&& !subFiles[i].getName().toLowerCase().contains("2coco")) {
 					ruta_afm = f.getAbsolutePath() + "/" + subFiles[i].getName();
 					
 					//boolean valido = vf.Validate(ruta_afm);

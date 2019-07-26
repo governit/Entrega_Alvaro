@@ -31,9 +31,9 @@ public class MainClass {
 			String ruta = prop.getProperty("ruta");
 			String ruta_salida = prop.getProperty("ruta_salida");
 			int algoritmo = Integer.parseInt(prop.getProperty("algoritmo"));
-			String heu = prop.getProperty("heuristica");
+			String heu = "1";//prop.getProperty("heuristica");
 			String ruta_sols = prop.getProperty("ruta_solution_constraints");
-			int limitado = Integer.parseInt(prop.getProperty("limitado"));
+			int limitado = 0;//Integer.parseInt(prop.getProperty("limitado"));
 			int tipo_entrada = Integer.parseInt(prop.getProperty("tipo_entrada"));
 			int num_sols = Integer.parseInt(prop.getProperty("num_sols"));
 			String experiment = prop.getProperty("experiment").trim();

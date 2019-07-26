@@ -126,7 +126,6 @@
 	<classpathentry kind="lib" path="libs/Sat4jReasoner-1.0.0-sources.jar"/>
 	<classpathentry kind="lib" path="libs/Sat4jReasoner-1.0.1.jar"/>
 	<classpathentry kind="lib" path="libs/trove4j-3.0.3.jar"/>
-	<classpathentry kind="lib" path="libs/z3_4_6/bin/com.microsoft.z3.jar"/>
 	<classpathentry kind="lib" path="libs/junit-4.12.jar"/>
 	<classpathentry kind="lib" path="libs/choco-solver-4.0.8-no-dep.jar"/>
 	<classpathentry kind="lib" path="libs/choco-solver-4.0.8-sources.jar"/>
@@ -134,5 +133,6 @@
 	<classpathentry kind="lib" path="libs/choco-parsers-4.0.4-with-dependencies.jar"/>
 	<classpathentry kind="lib" path="libs/java-json.jar"/>
 	<classpathentry kind="lib" path="libs/json-simple-1.1.1.jar"/>
+	<classpathentry kind="lib" path="libs/z3-4.8.5-x64-win/bin/com.microsoft.z3.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

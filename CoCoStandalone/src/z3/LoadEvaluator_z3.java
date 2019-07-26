@@ -46,7 +46,7 @@ public class LoadEvaluator_z3 {
 		cfg.put("model", "true");
 		Context ctx = new Context(cfg);
 		String[ ] blocks = bench.split("\\(");
-		BoolExpr expr = ctx.parseSMTLIB2String(bench, null, null, null, null);
+		BoolExpr[] expr = ctx.parseSMTLIB2String(bench, null, null, null, null);
 		String salida = "";
 		System.out.println("leyendo_modelo_z");
 		solver = ctx.mkOptimize();// ctx.mkSolver();
