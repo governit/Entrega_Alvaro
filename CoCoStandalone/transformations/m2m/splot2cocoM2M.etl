@@ -1,0 +1,44 @@
+
+
+rule FM2FM
+	transform m : sPLOT2CoCo!FM
+	to n : FMCoCo!FeatureModel {
+		var coco = FMCoCo!CoCo.all.first();
+		
+		if(coco == null){
+			coco = FMCoCo!CoCo.createInstance();
+		}
+		
+		var fms = FMCoCo!FeatureModel.all();
+		var attributes = m.attributes;
+		var crossTreeConstraints = m.crossTreeConstraints;
+		var relationships = m.relationships;
+		m.features.size().println();
+		var root = m.relationships.first();
+		"hay que hacerlo:".println();
+		root.println();
+		var rooTC = root.treeConstraints;
+		
+		n.name = root.parent.name + fms.size();
+		n.root = createFeature(root.parent, true, true);
+		
+		
+		
+		coco.featureModels.add(n);
+	}
+operation Any createFeature(feature : sPLOT2CoCo!features, abst : Boolean, mandatory : Boolean) : FMCoCo!Feature {
+	var newFeature = new FMCoCo!Feature();
+	
+	newFeature.id =  "123";
+	newFeature.name = "lalala";
+	newFeature.featureModel = FMCoCo!FeatureModel.all.select(x|x.name == getFeatureModelName()).first();
+	newFeature.`abstract` = abst;
+	newFeature.mandatory = mandatory;
+	
+	return newFeature;
+}
+operation Any getFeatureModelName() : String {
+	var fms = FMCoCo!FeatureModel.all();
+	var root = "modeo de practica"; 
+	return root;
+}

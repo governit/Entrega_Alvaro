@@ -1,0 +1,233 @@
+//---------------------------------------------------------
+// Description
+//---------------------------------------------------------
+
+/**
+ * This ETL transfomation is responsible of extending a CoCo 
+ * model with attributes and solution constraints, according to 
+ * the CoCo DSL specification. Thus, the possible resulting
+ * CoCo elements are: 
+ *	1. Attribute Type
+ *	2. Attribute Type Element
+ *	3. Feature Attribute
+ *	4. Feature Attribute Element
+ *	5. Optimization SC
+ *  6. Hard Limit SC
+ *  7. Selection State SC
+ */
+
+
+//---------------------------------------------------------
+// Rules
+//---------------------------------------------------------
+
+/**
+ * Rule for transforming Attribute Types from the CoCo DSL
+ * to Attribute Types in the CoCo model specification. It 
+ * defines the type ID, name, elements, and independent attribute
+ * type. This is a direct mapping.
+ */
+/*rule AttributeType2AttributeType
+	transform m : DSLCoCo!AttributeType
+	to n : FMCoCo!AttributeType {
+		var coco = FMCoCo!CoCo.all.first();
+		var elements = m.elements;
+		n.id = m.name;
+		n.name = m.name;
+		
+		for(e in elements) {
+			n.elements.add(e.equivalent());
+		}
+		
+		if(m.independentAttrType <> null) {
+			n.independentAttrType = FMCoCo!AttributeType.all.select(x|x.id = m.independentAttrType.name).first();
+		}
+		
+		coco.attributeTypes.add(n);
+	}*/
+
+/**
+ * Rule for transforming Attribute Type Elements from the CoCo 
+ * DSL to Attribute Type Elements in the CoCo model. It defines
+ * the name and data type of each element. This is a direct 
+ * mapping.
+ * TODO: Ver cómo manipular sin condiciones el valor del enum literal. 
+ */
+/*rule AttributeTypeElement2AttributeTypeElement
+	transform m : DSLCoCo!AttributeTypeElement
+	to n : FMCoCo!AttributeTypeElement {
+		n.name = m.name; 
+		
+		if(m.dataType == 'string') {
+			n.dataType = FMCoCo!DataType#string;
+		}
+		else if(m.dataType == 'int') {
+			n.dataType = FMCoCo!DataType#int;
+		}
+		else if(m.dataType == 'double') {
+			n.dataType = FMCoCo!DataType#double;
+		}
+		else if(m.dataType == 'boolean') {
+			n.dataType = FMCoCo!DataType#boolean;
+		}	
+	}*/
+
+/**
+ * Rule for transforming Feature Attributes from the CoCo DSL
+ * to Feature Attributes in the CoCo model specification. It 
+ * defines the attribute name, elements, and related attribute 
+ * type and feature. This is a direct mapping.
+ */
+rule FeatureAttribute2FeatureAttribute
+	transform m : DSLCoCo!FeatureAttribute
+	to n : FMCoCo!FeatureAttribute {
+		var elements = m.values;
+		
+		n.name = m.name;
+		n.attrType = FMCoCo!AttributeType.all.select(x|x.id = m.attrType.name).first();
+		
+		for(e in elements) {
+			n.elements.add(e.equivalent());
+		}
+		
+		n.attrType.featureAttributes.add(n);
+		setFeature2FeatureAttributeRelation(n);
+	}
+
+/**
+ * Rule for transforming Feature Attribute Elements from the CoCo 
+ * DSL to Feature Attribute Elements in the CoCo model. It defines
+ * the element value. This is a direct mapping.
+ */
+rule FeatureAttributeElement2FeatureAttributeElement
+	transform m : DSLCoCo!FeatureAttributeElement
+	to n : FMCoCo!FeatureAttributeElement {
+		n.value = m.value;
+	}
+
+/**
+ * Rule for transforming Optimization constraints from the CoCo
+ * DSL to Optimization constraints in the CoCo model. It defines 
+ * the solution constraint type, function (funct), and related
+ * attribute type. This is a direct mapping.
+ */
+rule OptimizationSC2OptimizationSC
+	transform m : DSLCoCo!OptimizationSC
+	to n : FMCoCo!OptimizationSC {
+		var coco = FMCoCo!CoCo.all.first();
+		
+		n.type = FMCoCo!SCType#optimization;
+		
+		if(m.funct == "minimize") {
+			n.funct = FMCoCo!OptimizationSCFunct#minimize;
+		}
+		else if(m.funct == "maximize") {
+			n.funct = FMCoCo!OptimizationSCFunct#maximize;
+		}
+		
+		n.attrType = FMCoCo!AttributeType.all.select(x|x.id = m.attrType.name).first();
+		
+		coco.solutionConstraints.add(n);
+	}
+
+/**
+ * Rule for transforming Hard Limit constraints from the CoCo
+ * DSL to Hard Limit constraints in the CoCo model. It defines 
+ * the solution constraint type, related attribute type, and 
+ * one or two inequality expressions. This is a direct mapping.
+ */
+rule HardLimitSC2HardLimitSC
+	transform m : DSLCoCo!HardLimitSC
+	to n : FMCoCo!HardLimitSC {
+		var coco = FMCoCo!CoCo.all.first();
+		var expression1 = new FMCoCo!HardLimitDRExpression();
+		
+		n.type = FMCoCo!SCType#hardLimit;
+		n.attrType = FMCoCo!AttributeType.all.select(x|x.id = m.attrType.name).first();
+		
+		expression1.value = m.value1;
+		expression1.op = getOperationTypeHardLimit(m.op1);
+		n.expressions.add(expression1);
+		
+		if(m.op2 <> null) {
+			var expression2 = new FMCoCo!HardLimitDRExpression();
+			expression2.value = m.value2;
+			expression2.op = getOperationTypeHardLimit(m.op2);
+			n.expressions.add(expression2);
+		}
+		
+		coco.solutionConstraints.add(n);
+	}
+
+/**
+ * Rule for transforming Selection State constraints from the CoCo
+ * DSL to Selection State constraints in the CoCo model. It defines 
+ * the solution constraint type, state, and related feature. This 
+ * is a direct mapping.
+ */
+rule SelectionStateSC2SelectionStateSC
+	transform m : DSLCoCo!SelectionStateSC
+	to n : FMCoCo!SelectionStateSC {
+		var coco = FMCoCo!CoCo.all.first();
+		
+		n.type = FMCoCo!SCType#selectionState;
+		
+		if(m.state == "mandatory"){
+			n.state = FMCoCo!SelectionStateSCType#mandatory;
+		}
+		else if(m.state == "forbidden"){
+			n.state = FMCoCo!SelectionStateSCType#forbidden;
+		}
+		else if(m.state == "preferred"){
+			n.state = FMCoCo!SelectionStateSCType#preferred;
+		}
+		n.feature = FMCoCo!Feature.all.select(x|x.id = m.feature.name).first();
+		
+		coco.solutionConstraints.add(n);
+	}
+
+
+//---------------------------------------------------------
+// Operations
+//---------------------------------------------------------
+
+/**
+ * Operation for assigning a feature attribute to the set 
+ * of features specified in the CoCo DSL. 
+ * @param: featureAttribute - FMCoCo!FeatureAttribute to be
+ * assigned to a set of features.
+ */
+operation setFeature2FeatureAttributeRelation(featureAttribute : FMCoCo!FeatureAttribute) {
+	var features = DSLCoCo!Feature.all();
+	
+	for(f in features) {
+		var feature = FMCoCo!Feature.all.select(x|x.id = f.name).first();
+		var attribute = f.attributes.exists(x|x.name.name = featureAttribute.name);
+		
+		if(attribute and feature <> null) {
+			feature.featureAttributes.add(featureAttribute);
+		}
+	}
+}
+
+operation getOperationTypeHardLimit(op : String) : Any {
+	var realOp;
+	
+	if(op == "geq"){
+		realOp = FMCoCo!HardLimitSCOp#geq;
+	}
+	else if(op == "leq"){
+		realOp = FMCoCo!HardLimitSCOp#leq;
+	}
+	else if(op == "gt"){
+		realOp = FMCoCo!HardLimitSCOp#gt;
+	}
+	else if(op == "lt"){
+		realOp = FMCoCo!HardLimitSCOp#lt;
+	}
+	else if(op == "eq"){
+		realOp = FMCoCo!HardLimitSCOp#eq;
+	}
+	
+	return realOp;
+}

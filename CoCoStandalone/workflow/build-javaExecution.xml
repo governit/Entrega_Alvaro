@@ -1,0 +1,23 @@
+<project name="CSPModel" basedir="." default="main">
+	<target name="clean">
+        <delete dir="build"/>
+    </target>
+
+    <target name="compile">
+        <mkdir dir="build/classes"/>
+        <javac srcdir="app/generated" destdir="build/classes"/>
+    </target>
+
+    <target name="jar">
+        <mkdir dir="build/jar"/>
+        <jar destfile="build/jar/CSPModel.jar" basedir="build/classes">
+            <manifest>
+                <attribute name="Main-Class" value="generated.CSPModel"/>
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="run">
+        <java jar="build/jar/CSPModel.jar" fork="true"/>
+    </target>
+</project>

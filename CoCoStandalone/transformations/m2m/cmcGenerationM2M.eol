@@ -1,0 +1,106 @@
+main(0.05);
+
+/**
+ * Main operation. It calls and orchestrates the remaining
+ * operations in order to generate CMCs based on a percentage.
+ * @params percentage : real that represents the amount of CMCs
+ * based on the total number of features in the FSG.
+ */
+operation main(percentage : Real) {
+	var size = FMCoCo!Feature.all.size();
+	var cmcNumber = size * percentage;
+	var fms = FMCoCo!FeatureModel.all();
+	var types = populateCMCOptions();
+	"CMC: ".print();
+	cmcNumber.println();
+	if(fms.size() > 1) {
+		var i = 0;
+		while (i < cmcNumber){ 
+			var stop = false;
+			
+			while(stop == false){
+				var fm1 = FMCoCo!FeatureModel.all.random();
+				var fm2 = FMCoCo!FeatureModel.all.random();
+				var differentFMs = differentFeatureFMs(fm1, fm2);
+					
+				if(differentFMs){
+					var type = types.generateCMCRandomType();
+					createCMC(type, fm1, fm2);
+					stop = true;
+				}
+			}
+			
+			i++;
+		}
+		"Finish".println();
+	}
+}
+
+/**
+ * Shows if any two features are defined in different FMs.
+ * true: feature1 and feature2 are contained in different FMs
+ * false: feature1 and feature2 are contained in the same FM
+ */
+operation differentFeatureFMs(fm1 : FMCoCo!FeatureModel, fm2 : FMCoCo!FeatureModel) : Boolean {
+	var different = false;
+	
+	if(fm1 <> fm2){
+		different = true;
+	}
+	
+	return different;
+}
+
+/**
+ * Selects a random value from de CMC types.
+ * 1: CMC - requires
+ * 2: CMC - excludes
+ */
+operation OrderedSet generateCMCRandomType() : Integer {
+	var type = self.random();
+	return type;
+}
+
+/**
+ * Creates a new CMC based on a type and two features.
+ * It distinguishes among requires and excludes types.
+ */
+ operation createCMC(type : Integer, fm1 : FMCoCo!FeatureModel, fm2 : FMCoCo!FeatureModel) {
+ 	var feature1 = FMCoCo!Feature.allInstances.select(x|x.featureModel.name == fm1.name).random();
+ 	var feature2 = FMCoCo!Feature.allInstances.select(x|x.featureModel.name == fm2.name).random();
+ 	
+ 	var coco = FMCoCo!CoCo.all.first();
+ 	var cmc = new FMCoCo!CrossModelConstraint();
+ 	var expression1 = new FMCoCo!CMConstraintExpression();
+ 	expression1.features = new Collection();
+ 	expression1.features.add(feature1);
+ 	expression1.op = FMCoCo!CMConstraintType#`implies`;
+ 	
+ 	if(type == 1) {
+ 		expression1.features.add(feature2);
+ 		cmc.expressions.add(expression1);
+ 	}
+
+ 	else if(type == 2){
+ 		var expression2 = new FMCoCo!CMConstraintExpression();
+ 		expression2.features = new Collection();
+ 		expression2.features.add(feature2);
+ 		expression2.op = FMCoCo!CMConstraintType#`not`;
+ 		cmc.expressions.add(expression1);
+ 		expression1.expressions.add(expression2);
+ 	}
+ 	
+ 	coco.cmConstraints.add(cmc);
+ }
+ 
+ /**
+ * Returns an ordered set with integers as elements.
+ * 1: CMC - requires
+ * 2: CMC - excludes
+ */
+operation populateCMCOptions() : OrderedSet {
+	var types = new OrderedSet();
+	types.add(1);
+	types.add(2);
+	return types;
+}

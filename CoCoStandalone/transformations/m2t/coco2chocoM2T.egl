@@ -1,0 +1,1087 @@
+[%
+
+//---------------------------------------------------------
+// Description
+//---------------------------------------------------------
+
+/**
+ * This EGL transfomation is responsible of transforming the CoCo
+ * model to a Java CSP impelmented with Choco solver (v3.3.3). 
+ */
+ 
+%]
+
+package generated;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import org.chocosolver.solver.ResolutionPolicy;
+import org.chocosolver.solver.Solver;
+import org.chocosolver.solver.constraints.Constraint;
+import org.chocosolver.solver.constraints.IntConstraintFactory;
+import org.chocosolver.solver.constraints.LogicalConstraintFactory;
+import org.chocosolver.solver.constraints.SatFactory;
+import org.chocosolver.solver.constraints.nary.cnf.LogOp;
+import org.chocosolver.solver.search.loop.monitors.SMF;
+import org.chocosolver.solver.search.strategy.IntStrategyFactory;
+import org.chocosolver.solver.search.strategy.strategy.IntStrategy;
+import org.chocosolver.solver.trace.Chatterbox;
+import org.chocosolver.solver.variables.BoolVar;
+import org.chocosolver.solver.variables.IntVar;
+import org.chocosolver.solver.variables.Variable;
+import org.chocosolver.solver.variables.VariableFactory;
+import generated.util.CSPUtil;
+
+public class CSPModel {
+	private static Solver solver;
+	[%declareFeatures();%]
+	[%declareAttributeTypes();%]
+	
+	public static void main(String[] args) {
+		solver = new Solver();
+		
+		//--------------------------------------------
+		//Features
+		//--------------------------------------------
+		initializeVars();
+		
+		//--------------------------------------------
+		//Feature Attributes
+		//--------------------------------------------
+		initializeFeatureAttributes();
+		
+		//--------------------------------------------
+		//Tree Constraints
+		//--------------------------------------------
+		[%/*defineAttrsDependencyValue();*/%]
+		[%defineParentChildrenAndTreeConstraints();%]
+		
+		//--------------------------------------------
+		//Cross-Tree Constraints
+		//--------------------------------------------
+		[%defineCrossTreeConstraints();%]
+		
+		//--------------------------------------------
+		//Cross-Model Constraints
+		//--------------------------------------------
+		[%defineCrossModelConstraints();%]
+		
+		//--------------------------------------------
+		//Solve
+		//--------------------------------------------
+		long start = System.currentTimeMillis();
+		System.out.println("Started at: " + start);
+		
+		[%defineSolutionConstraints();%]
+		
+		[%//setSearchStrategy(0);
+		%]
+		
+		long end = System.currentTimeMillis();
+		System.out.println("Ended at: " + end);
+		System.out.println("Total time: " + (end - start));
+	}
+	
+	private static void initializeVars(){
+		[%defineFMFeatures();%]
+	}
+	
+	private static void initializeFeatureAttributes(){
+		[%defineAttributeTypes();%]
+		
+		[%defineFeatureAttributes();%]
+	}
+	
+	private static IntVar[] getFeatureVars(int contFeatures){
+		IntVar[] featureVars = new IntVar[contFeatures];
+		Variable[] varsSolver = solver.getVars();
+		int index = 0;
+		for(int i = 0; i < varsSolver.length; i++) {
+			Variable current = varsSolver[i];
+			if(current.getName().startsWith("feature_")) {
+				featureVars[index] = (IntVar) current;
+				index++;
+			}
+		}
+		
+		return featureVars;
+	}
+}
+
+[%
+
+//---------------------------------------------------------
+// Operations
+//---------------------------------------------------------
+
+	operation declareFeatures(){
+		var features = FMCoCo!Feature.all();
+		for(f in features) {
+		%]	private static BoolVar [%=f.id%];
+		[%
+		}
+	}
+	/**
+	 * Operation responsible of creating feature boolean variables 
+	 * in the domain feature model. Selection State solution
+	 * constraints are considered in order to modify possible domains.
+	 * ALERT: this operation applies to scenarios with multiple stakeholders,
+	 * each one having a complete valid configuration. Features that are not
+	 * included in at least one configuration are not part of the resulting
+	 * CSP.
+	 * TODO: Contemplar los siguientes escenarios (parametrización de búsqueda):
+	 *  1. Una configuración parcial
+	 *  2. Varias configuraciones parciales (con algunas completas?)
+	 * TODO: definir escenarios de modelamiento:
+	 *  1. Un solo FM
+	 *  2. FSG con FM dominio y FMs alternativos 
+	 */
+	operation defineFMFeatures() {
+		var configScenario = FMCoCo!CoCo.all().first().configScenario;
+		var configs = FMCoCo!Config.all();
+		var configConstraints = FMCoCo!CoCo.all.first().configConstraints.select(x|x.type == FMCoCo!CCType#selectionState);
+		//var fmDomain = FMCoCo!FeatureModel.all.select(x|x.isDomain = true);
+		var fms = FMCoCo!FeatureModel.all();
+		var preferredFeatures = new OrderedSet();
+		var mandatoryFeatures = new OrderedSet();
+		var forbiddenFeatures = new OrderedSet();
+		var contFeatures = 0;
+		var features;
+		
+		for(s in configConstraints) {
+			var feature = FMCoCo!Feature.all.select(x|x.id == s.feature.id).first();
+			
+			if(s.state == 'mandatory') {
+				mandatoryFeatures.add(feature);
+				preferredFeatures.add(feature);
+			}
+			else if(s.state == 'forbidden') {
+				forbiddenFeatures.add(feature);
+				preferredFeatures.add(feature);
+			}
+		}
+		
+		// 1 FM Domain (config scenario: FM Search)
+		//if(configScenario == FMCoCo!ConfigScenarioType#fmSearch) {
+			defineFMFeaturesConfigScenarioFMSearch(mandatoryFeatures, forbiddenFeatures);
+		//}
+		
+		// 1 FM domain + FM alternative(s) + complete configs
+		/*else if(fmDomain.size() == 1 and fms.size() >= 1) {
+			contFeatures = preferredFeatures.size();
+			for(fm in fms) {
+				features = FMCoCo!Feature.all.select(x|x.featureModel == fm);
+				contFeatures = contFeatures + features.size();
+			}
+			%]		int contFeatures = [%=contFeatures%];
+			
+			[%
+		
+			defineFeaturesFMDomainAlternativesCC(configs, preferredFeatures, 
+			mandatoryFeatures, forbiddenFeatures);
+			defineAlternativeFMFeatures(features, mandatoryFeatures, forbiddenFeatures);
+		}*/
+	}
+	
+	/**
+	 * TODO: doc
+	 */
+	operation defineFMFeaturesConfigScenarioFMSearch(mandatoryFeatures : OrderedSet, forbiddenFeatures : OrderedSet) {
+		var fms = FMCoCo!FeatureModel.all();
+		var features = FMCoCo!Feature.all();
+		var contFeatures = features.size();
+		
+		%]		int contFeatures = [%=contFeatures%];
+			
+		[%
+		
+		for(fm in fms) {
+			mandatoryFeatures.add(fm.root);
+		}
+		
+		defineAlternativeFMFeatures(features, mandatoryFeatures, forbiddenFeatures);
+	}
+	
+	/**
+	 * Operation responsible of defining feature variables for 
+	 * the scenario with one domain FM, one or more alternative
+	 * FMs, and more than one complete configurations. Configuration 
+	 * selected features are treated as preferred features.
+	 * @param: configs - array of complete stakeholers configurations
+	 * @param: preferredFeatures - OrderedSet of preffered features
+	 * including configurations selected features
+	 * @param: mandatoryFeatures - OrderedSet of manadatory features 
+	 * defined as solution constraints
+	 * @param: forbiddenFeatures - OrderedSet of forbidden features 
+	 * defined as solution constraints
+	 */
+	operation defineFeaturesFMDomainAlternativesCC(configs : Any, preferredFeatures : OrderedSet, 
+	mandatoryFeatures : OrderedSet, forbiddenFeatures : OrderedSet) {
+		for(c in configs) {
+			for(f in c.features) {
+				
+				if(not preferredFeatures.includes(f)) {
+					preferredFeatures.add(f);
+				}
+			}
+		}
+		
+		for(f in preferredFeatures) {
+			if(mandatoryFeatures.includes(f)) {
+			%]		[%=f.id%] = (BoolVar) VariableFactory.fixed("feature_[%=f.id%]", 1, solver);
+			[%
+			}
+			
+			else if(forbiddenFeatures.includes(f)) {
+			%]		[%=f.id%] = (BoolVar) VariableFactory.fixed("feature_[%=f.id%]", 0, solver);
+			[%
+			}
+			
+			else {
+			%]		[%=f.id%] = VariableFactory.bool("feature_[%=f.id%]", solver);
+			[%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of creating selection variables related
+	 * to features in non-domain feature models. It also inspects the 
+	 * selectionState decision rules and creates the boolean variables
+	 * accordingly.
+	 * @param: features - array of features in a given alternative FM
+	 * @param: mandatoryFeatures - OrderedSet of manadatory features 
+	 * defined as solution constraints
+	 * @param: forbiddenFeatures - OrderedSet of forbidden features 
+	 * defined as solution constraints
+	 * ALERT: Input onfigurations do not consider features in non-domain
+	 * feature models.
+	 * TODO: Falta considerar las reglas de selection state asociadas a 
+	 * estos modelos. (Validar comportamiento dependiendo del escenario
+	 * de decisión definido: 1. varias completas; 2. una parcial; 3. varias
+	 * parciales)
+	 */
+	operation defineAlternativeFMFeatures(features : Any, mandatoryFeatures : OrderedSet, forbiddenFeatures : OrderedSet) {
+		for(f in features) {
+			if(mandatoryFeatures.includes(f)) {
+			%]		[%=f.id%] = (BoolVar) VariableFactory.fixed("feature_[%=f.id%]", 1, solver);
+			[%
+			}
+			
+			else if(forbiddenFeatures.includes(f)) {
+			%]		[%=f.id%] = (BoolVar) VariableFactory.fixed("feature_[%=f.id%]", 0, solver);
+			[%
+			}
+			
+			else {
+			%]		[%=f.id%] = VariableFactory.bool("feature_[%=f.id%]", solver);
+			[%
+			}
+		}
+	}
+	
+	operation declareAttributeTypes() {
+		var attrTypes = FMCoCo!AttributeType.all();
+		//var featuresSize = FMCoCo!Feature.all.select(x|x.featureModel.isDomain = false).size();
+		
+		for(a in attrTypes) {
+			var type = a.dataType;
+			var name = a.id.replace(" ", "");
+			
+			if(type == FMCoCo!DataType#int) {
+			%]		private static HashMap<String, IntVar> featureAttr[%=name%];
+			[%
+			}
+			else if (type == 'double') {
+			%]		private static HashMap<String, IntVar> featureAttr[%=name%];
+			[%
+			}
+			else if (type == 'boolean') {
+			%]		private static HashMap<String, BoolVar> featureAttr[%=name%];
+			[%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of creating the data structures that
+	 * store feature attributes.
+	 * TODO: validar si la estructura de HasMap es la má adecuada
+	 * o se empplean matrices como en CSPTool.
+	 */
+	operation defineAttributeTypes() {
+		var attrTypes = FMCoCo!AttributeType.all();
+		//var featuresSize = FMCoCo!Feature.all.select(x|x.featureModel.isDomain = false).size();
+		
+		for(a in attrTypes) {
+			var type = a.dataType;
+			var name = a.id.replace(" ", "");
+			
+			if(type == FMCoCo!DataType#int) {
+			%]		featureAttr[%=name%] = new HashMap<String, IntVar>();
+			[%
+			}
+			else if (type == 'double') {
+			%]		featureAttr[%=name%] = new HashMap<String, IntVar>();
+			[%
+			}
+			else if (type == 'boolean') {
+			%]		featureAttr[%=name%] = new HashMap<String, BoolVar>();
+			[%
+			}
+		}
+	}
+	
+	/**
+	 * Operationn responsible of defining the feature attribute 
+	 * variables in the CSP. All feature models are verified in 
+	 * order to create the corresponding attributes.
+	 * ALERT: the domain feature model does not have feature attributes.
+	 * these are only associated to non-domain feature models.
+	 * TODO: falta manejar el tema del tipo de atributo independiente.
+	 * Qué operaciones se pueden aplicar? Comenzar con multiplicación.
+	 */
+	operation defineFeatureAttributes() {
+		var fms = FMCoCo!FeatureModel.all();
+		
+		for(fm in fms) {
+			var features = FMCoCo!Feature.all.select(x|x.featureModel == fm);
+			
+			for(f in features) {
+				var attrs = f.featureAttributes;
+				var independentAttrTypes = new OrderedSet();
+				
+				for(a in attrs) {
+					var attrType = a.attrType;
+					var type = attrType.dataType;
+					
+					if(type == FMCoCo!DataType#int) {
+						defineVarPerAttributeType(a, f);
+					}
+				}
+				
+				for(i in independentAttrTypes) {
+					//defineVarPerAttributeType(i, f);
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of creating a feature attribute 
+	 * in the CSP given the CoCo attribute and the related feature.
+	 * It distinguishes between String, double, and boolean
+	 * data types. Moreover, if the parent feature is deselected
+	 * the attribute var assumes a value of 0.
+	 * TODO: falta manejar decimales de una manera más inteligente.
+	 */
+	operation defineVarPerAttributeType(attr : FMCoCo!FeatureAttribute, feature : FMCoCo!Feature) {
+		//var defaultValue = attr.elements[0].value.replace("'", "").asInteger();
+		var defaultValue = attr.defaultValue;
+		//var maxValue = attr.elements[2].value.replace("'", "").asInteger();
+		var type = attr.attrType.dataType;
+		
+		if(type <> FMCoCo!DataType#`String`) {
+			var name = attr.attrType.id.replace(" ", "");
+		
+			if(type == FMCoCo!DataType#int) {
+			%]		featureAttr[%=name%].put("[%=feature.id%]", VariableFactory.enumerated("[%=feature.id%][%=name%]", new int[]{0, [%=defaultValue%]}, solver));
+			[%
+				if(defaultValue <> 0) {
+					%]		LogicalConstraintFactory.or(IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), ">=", [%=defaultValue%]), IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), "=", 0));
+					[%
+				}
+			}
+			
+			else if (type == FMCoCo!DataType#double) {
+			%]		featureAttr[%=name%].put("[%=feature.id%]", VariableFactory.enumerated("[%=feature.id%][%=name%]", new int[]{[%=minValue%], (int)Math.round([%=maxValue%])}, solver));
+			[%
+			
+				//if(minValue <> 0) {
+				//	%]		LogicalConstraintFactory.or(IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), ">=", (int)Math.round([%=minValue%])), IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), "=", 0));
+				//	[%
+				//}
+			}
+			
+			else if (type == FMCoCo!DataType#boolean) {
+			%]		featureAttr[%=name%].put("[%=feature.id%]", VariableFactory.bool("[%=feature.id%][%=name%]", solver));
+			[%
+			}
+			
+			%]		LogicalConstraintFactory.ifThen(IntConstraintFactory.arithm([%=feature.id%], "=", 0), IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), "=", 0));
+			[%
+			
+			if(defaultValue > 0){
+			%]		LogicalConstraintFactory.ifThen(IntConstraintFactory.arithm([%=feature.id%], "=", 1), IntConstraintFactory.arithm(featureAttr[%=name%].get("[%=feature.id%]"), "!=", 0));
+			[%
+			}
+		}
+		
+	}
+	
+	/**
+	 * Operation responsible of managing dependency values
+	 * between attributes.
+	 * ALERT: this operation has not been used in the
+	 * solution.
+	 */
+	operation defineAttrsDependencyValue() {
+		var fms = FMCoCo!FeatureModel.all.select(x|x.isDomain = false);
+		
+		for(fm in fms) {
+			var features = FMCoCo!Feature.all.select(x|x.featureModel == fm);
+			
+			for(f in features) {
+				var attrs = f.featureAttributes;
+				
+				for(a in attrs) {
+									
+					if(a.attrType.independentAttrType <> null) {
+						var type = a.attrType.elements.select(x|x.name = 'value').first().dataType;
+						var value = a.elements.first().value;
+						
+						if(type == 'int' or type == 'boolean') {
+						%]		solver.post(ICF.times(featureAttr[%=a.attrType.independentAttrType.name%].get("[%=f.id%]"), [%=value.replace("'", "").asInteger()%], featureAttr[%=a.attrType.name%].get("[%=f.id%]"))); 
+						[%
+						}
+						
+						else if(type == 'double') {
+						%]		solver.post(ICF.times(featureAttr[%=a.attrType.independentAttrType.name%].get("[%=f.id%]"), [%=value.replace("'", "").asInteger()%], featureAttr[%=a.attrType.name%].get("[%=f.id%]"))); 
+						[%
+						}
+						
+					}
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of iterating over all models
+	 * in order to define tree constraints and parent-children
+	 * constraints in a recursive manner.
+	 */
+	operation defineParentChildrenAndTreeConstraints() {
+		var fms = FMCoCo!FeatureModel.all();
+		
+		for(fm in fms) {
+			var root = fm.root;
+			defineTreeConstraintsRecursive(root);
+			//defineParentChildrenConstraintsRecursive(root);
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining tree constraints in a 
+	 * recursive manner. All constraints are transformed according 
+	 * to their types (Mandatory, Or, Alternative)
+	 * @param: feature - a CoCo feature
+	 * TODO: modificar implementación de Mandatory (ahora es atributo)
+	 * y arreglar error del OR (se requiere un implies previo)
+	 */
+	operation defineTreeConstraintsRecursive(feature : FMCoCo!Feature) {
+		var constraints = feature.treeConstraints;
+		
+		for(c in constraints) {
+			var type = c.type;
+			var features = c.children;
+			
+			if(type == FMCoCo!TreeConstraintType#And) {
+				for(f in features) {
+					if(f.mandatory == true) {
+					%]		Constraint mandatory[%=feature.id%]_[%=f.id%] = IntConstraintFactory.arithm([%=feature.id%], "=", [%=f.id%]);
+		mandatory[%=feature.id%]_[%=f.id%].setName(Utilities.MANDATORY_TC);
+		solver.post(mandatory[%=feature.id%]_[%=f.id%]);
+					[%
+					}
+					else {
+					%]		Constraint optional[%=feature.id%]_[%=f.id%] = IntConstraintFactory.arithm([%=f.id%], "<=", [%=feature.id%]);
+		optional[%=feature.id%]_[%=f.id%].setName(Utilities.OPTIONAL_TC);
+		solver.post(optional[%=feature.id%]_[%=f.id%]);
+					[%
+					}
+				}
+			}
+				
+			if(type == FMCoCo!TreeConstraintType#Or) {
+				var cont = 0;
+			%]		IntVar sumOr[%=feature.id%]_[%=constraints.indexOf(c)%] = VariableFactory.enumerated("sumOr[%=feature.id%]", 0, [%=features.size()%], solver); 
+		BoolVar[] varsOr[%=feature.id%]_[%=constraints.indexOf(c)%] = new BoolVar[[%=features.size()%]];
+			[%
+				for(f in features) {
+				%]		varsOr[%=feature.id%]_[%=constraints.indexOf(c)%][[%=cont%]] = [%=f.id%];
+				[%
+					cont = cont + 1;
+				}
+			%]		solver.post(IntConstraintFactory.sum(varsOr[%=feature.id%]_[%=constraints.indexOf(c)%], sumOr[%=feature.id%]_[%=constraints.indexOf(c)%]));
+		Constraint or1[%=feature.id%]_[%=constraints.indexOf(c)%] = IntConstraintFactory.arithm(sumOr[%=feature.id%]_[%=constraints.indexOf(c)%], ">=", 1);
+		or1[%=feature.id%]_[%=constraints.indexOf(c)%].setName(Utilities.OR_TC);
+		
+		Constraint or0[%=feature.id%]_[%=constraints.indexOf(c)%] = IntConstraintFactory.arithm(sumOr[%=feature.id%]_[%=constraints.indexOf(c)%], "=", 0);
+		or0[%=feature.id%]_[%=constraints.indexOf(c)%].setName(Utilities.OR_TC);
+		LogicalConstraintFactory.ifThenElse([%=feature.id%], or1[%=feature.id%]_[%=constraints.indexOf(c)%], or0[%=feature.id%]_[%=constraints.indexOf(c)%]);
+			
+			[%
+			}
+				
+			else if(type == FMCoCo!TreeConstraintType#Alternative) {
+				var cont = 0;
+			%]		IntVar sumXor[%=feature.id%]_[%=constraints.indexOf(c)%] = VariableFactory.fixed("sumXor[%=feature.id%]", 1, solver);
+		BoolVar[] varsXor[%=feature.id%]_[%=constraints.indexOf(c)%] = new BoolVar[[%=features.size()%]];
+			[%
+				for(f in features) {
+				%]		varsXor[%=feature.id%]_[%=constraints.indexOf(c)%][[%=cont%]] = [%=f.id%];
+				[%
+					cont = cont + 1;
+				}
+			%]		solver.post(IntConstraintFactory.sum(varsXor[%=feature.id%]_[%=constraints.indexOf(c)%], sumXor[%=feature.id%]_[%=constraints.indexOf(c)%]));
+		Constraint xor1[%=feature.id%]_[%=constraints.indexOf(c)%] = IntConstraintFactory.arithm(sumXor[%=feature.id%]_[%=constraints.indexOf(c)%], "=", 1);
+		xor1[%=feature.id%]_[%=constraints.indexOf(c)%].setName(Utilities.XOR_TC);
+		
+		Constraint xor0[%=feature.id%]_[%=constraints.indexOf(c)%] = IntConstraintFactory.arithm(sumXor[%=feature.id%]_[%=constraints.indexOf(c)%], "=", 0);
+		xor0[%=feature.id%]_[%=constraints.indexOf(c)%].setName(Utilities.XOR_TC);
+		
+		LogicalConstraintFactory.ifThenElse([%=feature.id%], xor1[%=feature.id%]_[%=constraints.indexOf(c)%], xor0[%=feature.id%]_[%=constraints.indexOf(c)%]);
+			
+			[%
+			}
+			
+			for(f in features) {
+				defineTreeConstraintsRecursive(f);
+			}
+		}
+	} 
+	
+	/**
+	 * Operation responsible of defining parent-children constraints
+	 * in a recursive manner. If a child is selected then the parent 
+	 * is selected. If the parent is deselected then the children are
+	 * deselected.
+	 * @param: feature - a CoCo feature
+	 */
+	operation defineParentChildrenConstraintsRecursive(feature : FMCoCo!Feature) {
+		var constraints = feature.treeConstraints;
+		var features = 0;
+		
+		for(c in constraints) {
+			features += c.children.size();
+		}
+		
+		if(features > 0){
+			%]		IntVar sumParentChild[%=feature.id%] = VariableFactory.fixed("sumParentChild[%=feature.id%]", 0, solver); 
+		BoolVar[] varsParentChild[%=feature.id%] = new BoolVar[[%=features%]];
+				[%
+				
+			var cont = 0;	
+			for(c in constraints) {
+				var features = c.children;
+				
+				for(f in features) {
+				%]		varsParentChild[%=feature.id%][[%=cont%]] = [%=f.id%];
+				[%
+					cont = cont + 1;
+				}
+			}
+			%]		LogicalConstraintFactory.ifThen(IntConstraintFactory.arithm([%=feature.id%], "=", 0), IntConstraintFactory.sum(varsParentChild[%=feature.id%], sumParentChild[%=feature.id%]));
+			
+			[%
+			
+			for(c in constraints) {
+				var features = c.children;
+				var cont = 0;
+				
+				for(f in features) {
+					//defineParentChildrenConstraintsRecursive(f);
+				}
+			}
+		}
+}
+	
+	/**
+	 * Operation responsible of iterating over all models
+	 * in order to define cross-tree constraints in a recursive
+	 * manner.
+	 Only considers REQUIRES and EXCLUDES CTCs
+	 */
+	operation defineCrossTreeConstraints() {
+		var fms = FMCoCo!FeatureModel.all();
+		
+		for(fm in fms) {
+			var constraints = fm.ctConstraints;
+			for(c in constraints){
+				var expression = c.expressions.first();
+			%]		[%defineCrossTreeConstraintsRecursive(expression);%]
+			[%
+			}
+		}
+	} 
+	
+	/**
+	 * Operation responsible of defining cross-tree contraints 
+	 * that include implies, or, and, and not expressions.
+	 * @param: expression - cross-tree constraint expression to 
+	 * be transformed.
+	 */
+	operation defineCrossTreeConstraintsRecursive(expression : FMCoCo!CTConstraintExpression) {
+		var op = expression.op;
+		var expressions = expression.expressions;
+		var features = expression.features;
+		
+		if(op == FMCoCo!CTConstraintType#`implies`) {
+			defineCTConstraintsImpliesAndOr(expressions, features, 'implies');
+		}
+		
+		else if(op == FMCoCo!CTConstraintType#`and`) {
+			//defineCTConstraintsImpliesAndOr(expressions, features, 'and');
+		}
+		
+		else if(op == FMCoCo!CTConstraintType#`or`) {
+			//defineCTConstraintsImpliesAndOr(expressions, features, 'or');
+		}
+		
+		else if(op == FMCoCo!CTConstraintType#`not`) {
+			defineCTConstraintsNot(expressions, features);
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining implies, and, and or 
+	 * cross-tree constraint expressions.
+	 * @param: expressions - ordered set with available cross-
+	 * tree constraint expressions.
+	 * @param: features - ordered set with available features.
+	 * @param: op - String with involved operation between 
+	 * expressions and/or features.
+	 * ALERT: only works for 2 elements permutation (ee, ef, ff)
+	 * TODO: expresar más reglas lógicas.
+	 */
+	operation defineCTConstraintsImpliesAndOr(expressions : OrderedSet, features : OrderedSet, op : String) {
+		if(features.size() > 0) {
+			if(features.size() == 2) {
+				%]		Constraint requires[%=features.first().id%]_[%=features.last().id%] = IntConstraintFactory.arithm([%=features.first().id%], "<=", [%=features.last().id%]);
+		requires[%=features.first().id%]_[%=features.last().id%].setName(Utilities.REQUIRES_CTC);
+		solver.post(requires[%=features.first().id%]_[%=features.last().id%]);
+		[%
+			}
+			else {
+				%]		Constraint excludes[%=features.first().id%]_[%=features.last().id%] = IntConstraintFactory.arithm([%=features.first().id%], "+", [%=defineCrossTreeConstraintsRecursive(expressions.first())%]);
+		excludes[%=features.first().id%]_[%=features.last().id%].setName(Utilities.EXCLUDES_CTC);
+		solver.post(excludes[%=features.first().id%]_[%=features.last().id%]);
+		[%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining not cross-tree
+	 * constraint expressions.
+	 * @param: expressions - ordered set with available cross-
+	 * tree constraint expressions.
+	 * @param: features - ordered set with available features.
+	 * ALERT: only works for one feature or one expression.
+	 */
+	operation defineCTConstraintsNot(expressions : OrderedSet, features : OrderedSet) {
+		if(features.size() > 0) {
+			%][%=features.first().id%], "<=", 1[%
+		}
+		
+		else if(expressions.size() > 0) {
+			%]LogOp.nor([%=defineCrossTreeConstraintsRecursive(expressions.first())%])[%
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining cross-model
+	 * constraints in a recursive manner.
+	 */
+	operation defineCrossModelConstraints() {
+		var coco = FMCoCo!CoCo.all.first();
+		var cmConstraints = coco.cmConstraints;
+		
+		if(cmConstraints <> null) {
+			for(cmc in cmConstraints) {
+				var expressions = cmc.expressions;
+		
+				for(e in expressions){
+					defineCrossModelConstraintsRecursive(e);
+				}
+			}
+		}
+	} 
+	
+	/**
+	 * Operation responsible of defining cross-model contraints 
+	 * that include implies, or, and, and not expressions.
+	 * @param: expression - cross-model constraint expression to 
+	 * be transformed.
+	 */
+	operation defineCrossModelConstraintsRecursive(expression : FMCoCo!CMConstraintExpression) {
+		var op = expression.op;
+		var expressions = expression.expressions;
+		var features = expression.features;
+		
+		if(op == FMCoCo!CMConstraintType#`implies`) {
+			defineCMConstraintsImpliesAndOr(expressions, features, 'implies');
+		}
+		
+		else if(op == FMCoCo!CMConstraintType#`and`) {
+			//defineCMConstraintsImpliesAndOr(expressions, features, 'and');
+		}
+		
+		else if(op == FMCoCo!CMConstraintType#`or`) {
+			//defineCMConstraintsImpliesAndOr(expressions, features, 'or');
+		}
+		
+		else if(op == FMCoCo!CMConstraintType#`not`) {
+			defineCMConstraintsNot(expressions, features);
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining implies, and, and or 
+	 * cross-model constraint expressions.
+	 * @param: expressions - ordered set with available cross-
+	 * tree constraint expressions.
+	 * @param: features - ordered set with available features.
+	 * @param: op - String with involved operation between 
+	 * expressions and/or features.
+	 * ALERT: only works for 2 elements permutation (ee, ef, ff)
+	 * TODO: expresar más reglas lógicas.
+	 */
+	operation defineCMConstraintsImpliesAndOr(expressions : OrderedSet, features : OrderedSet, op : String) {
+		if(features.size() > 0) {
+			if(features.size() == 2) {
+				%]		Constraint requires[%=features.first().id%]_[%=features.last().id%] = IntConstraintFactory.arithm([%=features.first().id%], "<=", [%=features.last().id%]);
+		requires[%=features.first().id%]_[%=features.last().id%].setName(Utilities.REQUIRES_CMC);
+		solver.post(requires[%=features.first().id%]_[%=features.last().id%]);
+		[%
+			}
+			else {
+				%]		Constraint excludes[%=features.first().id%]_[%=features.last().id%] = IntConstraintFactory.arithm([%=features.first().id%], "+", [%=defineCrossModelConstraintsRecursive(expressions.first())%]);
+		excludes[%=features.first().id%]_[%=features.last().id%].setName(Utilities.EXCLUDES_CMC);
+		solver.post(excludes[%=features.first().id%]_[%=features.last().id%]);
+		[%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining not cross-model
+	 * constraint expressions.
+	 * @param: expressions - ordered set with available cross-
+	 * model constraint expressions.
+	 * @param: features - ordered set with available features.
+	 * ALERT: only works for one feature or one expression.
+	 */
+	operation defineCMConstraintsNot(expressions : OrderedSet, features : OrderedSet) {
+		if(features.size() > 0) {
+			%][%=features.first().id%], "<=", 1[%
+		}
+		
+		else if(expressions.size() > 0) {
+			%]LogOp.nor([%=defineCrossModelConstraintsRecursive(expressions.first())%])[%
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining solution constraints.
+	 * It differentiates hard limit and optimization constraints.
+	 * Selection state constraints are considered when defining
+	 * feature variables domain. An aggregation approach is employed
+	 * in order to manage the involved attribute types and the
+	 * corresponding attributes.
+	 */
+	//Cuidado con el first() de decision rules revisar
+	operation defineSolutionConstraints() {
+		var coco = FMCoCo!CoCo.all.first();
+		var configConstraints = coco.configConstraints;
+		var attrTypes = new OrderedSet();
+		var attrTypesHD = new OrderedSet();
+
+		if (configConstraints.size() == 0) {
+			%]		Chatterbox.showSolutions(solver);
+		solver.findAllSolutions();
+			[%
+		}
+		
+		else {
+			for(d in configConstraints) {
+				if(d.type <> FMCoCo!SCType#selectionState and not (attrTypes.includes(d.attrType))) {
+					var attrDataType = d.attrType.elements.select(x|x.name = 'defaultValue').first().dataType;
+					attrTypes.add(d.attrType);
+					
+					if(attrDataType == FMCoCo!DataType#int or attrDataType == FMCoCo!DataType#boolean) {
+					%]		List<IntVar> vars[%=d.attrType.id%]List = new ArrayList<IntVar>(featureAttr[%=d.attrType.id%].values());
+		IntVar[] vars[%=d.attrType.id%] = new IntVar[featureAttr[%=d.attrType.id%].values().size()];
+			
+		for(int i = 0; i < vars[%=d.attrType.id%]List.size(); i++) {
+					[%	
+						if(d.type == FMCoCo!SCType#optimization and d.funct == FMCoCo!OptimizationSCFunct#maximize){
+						%]
+		vars[%=d.attrType.id%][i] = VariableFactory.minus(vars[%=d.attrType.id%]List.get(i));
+						[%
+						}
+						
+						else {
+						%]
+		vars[%=d.attrType.id%][i] = (IntVar) vars[%=d.attrType.id%]List.get(i);
+						[%
+						}
+					%]
+		}
+		
+				[%
+					}
+				}
+			}
+			
+			attrTypesHD = defineDRHardLimit();
+			attrTypes.removeAll(attrTypesHD);
+			defineDROptimization(attrTypes);
+		}
+				
+	}
+	
+	/**
+	 * Operation responsible of defining optimization constraints.
+	 * Total vars are generated. It distinguishes between a one-
+	 * variable optimizaation and multi-variable optimization.
+	 * TODO: acotar dominio de las variables de agregación
+	 */
+	operation defineDROptimization(attrTypes : OrderedSet) {
+		var configConstraints = FMCoCo!CoCo.all.first().configConstraints.select(x|x.type == FMCoCo!SCType#optimization);
+		
+		//for(a in attrTypes) {
+		for(s in FMCoCo!CoCo.all.first().configConstraints) {
+			if(s.type == SCType#optimization or s.type == SCType#hardLimit){
+				var attr = s.attrType; 
+				var attrDataType = attr.elements.select(x|x.name = 'defaultValue').first().dataType;
+				
+				if(s.type == SCType#optimization and s.funct == FMCoCo!OptimizationSCFunct#maximize){
+				%]		IntVar total[%=attr.id%] = VariableFactory.bounded("total[%=attr.id%]", -1000000, 0, solver);
+			solver.post(IntConstraintFactory.sum(vars[%=attr.id%], total[%=attr.id%]));
+				[%	
+				}
+				else{
+				%]		IntVar total[%=attr.id%] = VariableFactory.bounded("total[%=attr.id%]", 0, 1000000, solver);
+			solver.post(IntConstraintFactory.sum(vars[%=attr.id%], total[%=attr.id%]));
+				[%	
+				}
+			}
+		}
+		
+		if(configConstraints.size() == 0){
+		 //Don't do nothing
+		}
+		
+		else if(configConstraints.size() > 1){
+			%]		
+		//SMF.limitSolution(solver, 10);
+		//Chatterbox.showSolutions(solver);
+		solver.findParetoFront(ResolutionPolicy.MINIMIZE[%
+			
+			for(d in configConstraints) {
+				var funct = d.funct;
+				var attrType = d.attrType;
+				
+				if(funct == FMCoCo!OptimizationSCFunct#maximize) {
+				%], total[%=attrType.id%][%
+				}
+				
+				else {
+				%], total[%=attrType.id%][%
+				}
+			}
+			
+			%]);
+		Chatterbox.printStatistics(solver);
+			[%
+		}
+		
+		else {
+			var funct = configConstraints.first().funct;
+			var attrType = configConstraints.first().attrType;
+			%]		//SMF.limitSolution(solver, 10);
+		//Chatterbox.showSolutions(solver);
+		solver.findOptimalSolution(ResolutionPolicy.[%=funct.toString().toUpperCase()%], total[%=attrType.id%]);
+		Chatterbox.printStatistics(solver);
+			[%
+		}
+	}
+	
+	/**
+	 * Operation responsible of defining hard limit constraints.
+	 * It dofferentiates between integer (int and bool) and double 
+	 * attributes.
+	 */
+	//Cuidado con el first() de decision rules revisar
+	operation defineDRHardLimit() : OrderedSet {
+		var configConstraints = FMCoCo!CoCo.all.first().configConstraints.first().select(x|x.type == 'hardLimit');
+		var attrTypes = new OrderedSet();
+		
+		for(d in configConstraints) {
+			var attrDataType = d.attrType.elements.select(x|x.name = 'value').first().dataType;
+			
+			if(attrDataType == 'int' or attrDataType == 'boolean') {
+				defineDRHardLimitInt(d);
+			}
+			else if(attrDataType == 'double') {
+				defineDRHardLimitDouble(d);
+			}
+			
+			attrTypes.add(d.attrType);
+		}
+		
+		return attrTypes;
+	}
+	
+	/**
+	 * Operation responsible of defining hard limit constraints
+	 * related to integer variables. It considers gt (greater than), 
+	 * geq (greater than or equal to), lt (less than), leq (less
+	 * than or equal to), and eq (equal to) expressions.
+	 */
+	operation defineDRHardLimitInt(d : FMCoCo!SolutionConstraint) {
+		var expressions = d.expressions;
+		var attrType = d.attrType;
+			
+		if(expressions.at(0).op == 'gt' or expressions.at(0).op == 'geq') {
+		%]		int minValue[%=attrType.id%] = [%=expressions.at(0).value%];
+		[%
+			if(expressions.size() > 1) {
+			%]		int maxValue[%=attrType.id%] = [%=expressions.at(1).value%];
+			[%
+			}
+			else {
+			%]		int maxValue[%=attrType.id%] = 1000000;
+			[%
+			}
+			
+			%]		IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", minValue[%=attrType.id%], maxValue[%=attrType.id%], solver);
+			[%
+			
+		}
+			
+		else if(expressions.at(0).op == 'lt' or expressions.at(0).op == 'leq') {
+		%]		int maxValue[%=attrType.id%] = [%=expressions.at(0).value%];
+		[%
+			if(expressions.size() > 1) {
+			%]		int minValue[%=attrType.id%] = [%=expressions.at(1).value%];
+			[%
+			}
+			else {
+			%]		int minValue[%=attrType.id%] = 0;
+			[%
+			}
+			
+			%]		IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", minValue[%=attrType.id%], maxValue[%=attrType.id%], solver);
+			[%
+		}
+		
+		else if(expressions.at(0).op == 'eq') {
+			%]		int value[%=attrType.id%] = [%=expressions.at(0).value%];
+			IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", value[%=attrType.id%], value[%=attrType.id%], solver);
+			[%
+		}
+		
+		
+		%]		
+		solver.post(IntConstraintFactory.sum(vars[%=attrType.id%], total[%=attrType.id%]));
+		[%
+	}
+	
+	/**
+	 * Operation responsible of defining hard limit constraints
+	 * related to double variables. It considers gt (greater than), 
+	 * geq (greater than or equal to), lt (less than), leq (less
+	 * than or equal to), and eq (equal to) expressions.
+	 */
+	operation defineDRHardLimitDouble(d : FMCoCo!SolutionConstraint) {
+		var expressions = d.expressions;
+		var attrType = d.attrType;
+			
+		if(expressions.at(0).op == 'gt' or expressions.at(0).op == 'geq') {
+		%]		int minValue[%=attrType.id%] = Math.round([%=expressions.at(0).value%]);
+		[%
+			if(expressions.size() > 1) {
+			%]		int maxValue[%=attrType.id%] = Math.round([%=expressions.at(1).value%]);
+			[%
+			}
+			else {
+			%]		int maxValue[%=attrType.id%] = 1000000;
+			[%
+			}
+			
+			%]		IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", minValue[%=attrType.id%], maxValue[%=attrType.id%], solver);
+			[%
+			
+		}
+			
+		else if(expressions.at(0).op == 'lt' or expressions.at(0).op == 'leq') {
+		%]		int maxValue[%=attrType.id%] = Math.round([%=expressions.at(0).value%]);
+		[%
+			if(expressions.size() > 1) {
+			%]		int minValue[%=attrType.id%] = Math.round([%=expressions.at(1).value%]);
+			[%
+			}
+			else {
+			%]		int minValue[%=attrType.id%] = 0;
+			[%
+			}
+			
+			%]		IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", minValue[%=attrType.id%], maxValue[%=attrType.id%], solver);
+			[%
+		}
+		
+		else if(expressions.at(0).op == 'eq') {
+			%]		int value[%=attrType.id%] = Math.round([%=expressions.at(0).value%]);
+			IntVar total[%=attrType.id%] = VariableFactory.bounded("total[%=attrType.id%]", value[%=attrType.id%], value[%=attrType.id%], solver);
+			[%
+		}
+		
+		%]		
+		solver.post(IntConstraintFactory.sum(vars[%=attrType.id%], total[%=attrType.id%]));
+		[%
+			
+	}
+	
+	operation setSearchStrategy(strategy : Integer) {
+		%]
+		IntVar[] featureVars = getFeatureVars(solver, contFeatures);
+		
+		IntStrategy strategyAttribute0 = IntStrategyFactory.custom(IntStrategyFactory.minDomainSize_var_selector(), IntStrategyFactory.min_value_selector(), varsAtribute0);
+		IntStrategy strategyAttribute1 = IntStrategyFactory.custom(IntStrategyFactory.minDomainSize_var_selector(), IntStrategyFactory.min_value_selector(), varsAtribute1);
+		[%
+	
+		if(strategy == 0){
+		%]
+		solver.set(strategyAttribute0, strategyAttribute1);
+		[%
+		}
+		
+		else if(strategy == 1){
+		%]
+		IntStrategy strategy1 = IntStrategyFactory.custom(new FMVarSelectorMoreConstsInstant(), IntStrategyFactory.randomBound_value_selector((long) (Math.random()*10)), featureVars);
+		
+		solver.set(startegy1, strategyAttribute0, strategyAttribute1);
+		[%
+		}
+		
+		else if (strategy == 2){
+		%]
+		IntStrategy strategy2 = IntStrategyFactory.custom(new FMVarSelectorMoreConstsInstant(), IntStrategyFactory.randomBound_value_selector((long) (Math.random()*10)), featureVars);
+		
+		solver.set(startegy1, strategyAttribute0, strategyAttribute1);
+		[%
+		}
+		
+		else if (strategy == 3){
+		%]
+		IntStrategy strategy3 = IntStrategyFactory.custom(new FMVarSelectorTCCTC(), IntStrategyFactory.randomBound_value_selector((long) (Math.random()*10)), featureVars);
+		
+		solver.set(startegy1, strategyAttribute0, strategyAttribute1);
+		[%
+		}
+	}
+%]

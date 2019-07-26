@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="CoCo" basedir=".">
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/tasks.xml"/>
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/emf/tasks.xml"/>
+
+	<echo>=== TRANSFORMING MODELS cocoDSLM2M===</echo>
+	<!--<epsilon.emf.register file="../../metamodels/CoCo2Afm.ecore" />-->
+	<epsilon.emf.register file="../../metamodels/coCoMM-copy.ecore" />
+
+	<echo>[ant] Registering CoCo model "${cocoModel}"</echo>
+	<epsilon.emf.loadModel 
+		name="FMCoCo" 
+		modelFile="${cocoModel}" 
+		metamodelUri="http://www.example.org/coCoMM" 
+		read="true" store="true" />
+
+	<echo>[ant] Registering CoCo DSL model "${cocoDSLModel}"</echo>
+		<epsilon.emf.loadModel 
+			name="DSLCoCo" 
+			aliases="DSLCoCo" 
+			modelFile="${cocoDSLModel}" 
+			metamodelUri="http://www.test7.edu/Test7" 
+			read="true" store="false" />
+	
+		<echo>[ant] Starting cocoDSL2cocoM2M transformation</echo>
+		<epsilon.etl src="../../transformations/m2m/cocoDSL2cocoM2M.etl">
+			<model ref="DSLCoCo"/>
+			<model ref="FMCoCo"/>
+		</epsilon.etl>
+		<epsilon.storeModel model="FMCoCo"/>
+		<echo>[ant] Finished</echo>
+
+</project>

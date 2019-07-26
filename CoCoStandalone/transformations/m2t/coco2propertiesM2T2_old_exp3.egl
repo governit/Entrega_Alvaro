@@ -1,0 +1,328 @@
+[%
+
+//---------------------------------------------------------
+// Description
+//---------------------------------------------------------
+
+/**
+ * This EGL transfomation is responsible of transforming the CoCo
+ * model to a properties file that contains all the CSP information. 
+ */
+
+setFeatures();
+setAttributeTypes();
+setFeatureAttributes();
+setAndTCs();
+setOrTCs();
+setAlternativeTCs();
+setCTCs();
+setCMCs();
+
+%]
+
+[%
+	operation setFeatures(){
+		var i = 0;
+		var fms = FMCoCo!FeatureModel.all();
+		var features = FMCoCo!Feature.all();
+		var mandatoryFeatures = 0;
+		var optionalFeatures = 0;
+		
+		%]featuresNum=[%=features.size()%]
+		[%
+		
+		for(fm in fms) {
+			var root = fm.root;
+			var localFeatures = FMCoCo!Feature.all.select(x|x.featureModel = fm);
+			
+			for(f in localFeatures) {
+				if(f = root) {
+					%]mandatoryFeature[%=mandatoryFeatures%]=[%=f.id%]
+					[%
+					mandatoryFeatures++;
+				}
+				else{
+					%]optionalFeature[%=optionalFeatures%]=[%=f.id%]
+					[%
+					optionalFeatures++;
+				}
+			}
+		}
+		
+		%]mandatoryFeaturesNum=[%=mandatoryFeatures%]
+		[%
+		%]optionalFeaturesNum=[%=features.size()-mandatoryFeatures%]
+		[%
+		
+	}
+	
+	operation setAttributeTypes(){
+		var i = 0;
+		var attributeTypes = FMCoCo!AttributeType.all();
+		
+		%]attributeType[%=i%]=Attribute1
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute2
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute3
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute4
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute5
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute6
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute7
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute8
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute9
+			[%
+			i++;
+			%]attributeType[%=i%]=Attribute10
+			[%
+			i++;
+		
+		
+	}
+	
+	operation setFeatureAttributes(){
+		var i = 0;
+		var features = FMCoCo!Feature.all();
+		var attributeTypes = FMCoCo!AttributeType.all();
+		
+		for(f in features) {
+		
+				%][%=f.id%].Attribute1=50,0,100
+					[%
+					%][%=f.id%].Attribute2=50,0,100
+					[%
+					%][%=f.id%].Attribute3=50,0,100
+					[%
+					%][%=f.id%].Attribute4=50,0,100
+					[%
+					%][%=f.id%].Attribute5=50,0,100
+					[%
+					%][%=f.id%].Attribute6=50,0,100
+					[%
+					%][%=f.id%].Attribute7=50,0,100
+					[%
+					%][%=f.id%].Attribute8=50,0,100
+					[%
+					%][%=f.id%].Attribute9=50,0,100
+					[%
+					%][%=f.id%].Attribute10=50,0,100
+					[%
+					i = 10;
+			
+			
+			
+			
+		}
+		if(attributeTypes.size() > 0){
+		%]attributeTypesNum=[%=attributeTypes.size()%]
+		[%
+		}else{
+			%]attributeTypesNum=[%=i%]
+		[%
+		}
+	}
+	
+	operation setAndTCs(){
+		var i = 0;
+		var features = FMCoCo!Feature.all();
+		var ands = FMCoCo!TreeConstraint.all.select(x|x.type = FMCoCo!TreeConstraintType#And);
+		ands.println();
+		var mandatoryAnds = 0;
+		var optionalAnds = 0;
+		
+		
+		
+		
+		for(f in features) {
+			var localAnds = f.treeConstraints.select(x|x.type = FMCoCo!TreeConstraintType#And);
+			
+			for(a in localAnds){
+				var localFeatures = a.children;
+				%]and[%=i%]=[%=f.id%]:[%
+				
+				for(lf in localFeatures){
+					%][%=lf.id%][%
+				
+					if(lf.mandatory = true){
+						%]*[%
+						mandatoryAnds++;
+					}
+					else{
+						optionalAnds++;
+					}
+					
+					if(lf <> localFeatures.last()){
+						%],[%
+					}
+				}
+				%]
+				
+				[%
+				i++;
+			}
+		}
+		%]andsNum=[%=mandatoryAnds+optionalAnds%]
+		[%
+		%]mandatoryAndsNum=[%=mandatoryAnds%]
+		[%
+		%]optionalAndsNum=[%=optionalAnds%]
+		[%
+	}
+	
+	operation setOrTCs(){
+		var i = 0;
+		var features = FMCoCo!Feature.all();
+		var ors = FMCoCo!TreeConstraint.all.select(x|x.type = FMCoCo!TreeConstraintType#Or);
+		
+		%]orsNum=[%=ors.size()%]
+		[%
+		
+		for(f in features) {
+			var localOrs = f.treeConstraints.select(x|x.type = FMCoCo!TreeConstraintType#Or);
+			
+			for(o in localOrs){
+				var localFeatures = o.children;
+				%]or[%=i%]=[%=f.id%]:[%
+				
+				for(lf in localFeatures){
+					%][%=lf.id%][%
+					
+					if(lf <> localFeatures.last()){
+						%],[%
+					}
+				}
+				%]
+				
+				[%
+				
+				i++;
+			}
+			
+		}
+	}
+	
+	operation setAlternativeTCs(){
+		var i = 0;
+		var features = FMCoCo!Feature.all();
+		var alts = FMCoCo!TreeConstraint.all.select(x|x.type = FMCoCo!TreeConstraintType#Alternative);
+		
+		%]altsNum=[%=alts.size()%]
+		[%
+		
+		for(f in features) {
+			var localAlts = f.treeConstraints.select(x|x.type = FMCoCo!TreeConstraintType#Alternative);
+			
+			for(a in localAlts){
+				var localFeatures = a.children;
+				%]alt[%=i%]=[%=f.id%]:[%
+				
+				for(lf in localFeatures){
+					%][%=lf.id%][%
+					
+					if(lf <> localFeatures.last()){
+						%],[%
+					}
+				}
+				%]
+				
+				[%
+				
+				i++;
+			}
+		}
+	}
+	
+	operation setCTCs(){
+		var i = 0;
+		var ctcs = FMCoCo!CrossTreeConstraint.all();
+		var requires = 0;
+		var excludes = 0;
+		
+		%]ctcsNum=[%=ctcs.size()%]
+		[%
+		
+		for(c in ctcs) {
+			var expressions = c.expressions;
+			var firstExp = expressions.first();
+			
+			if(firstExp.expressions.size() <> 0) {
+				var secondExp = firstExp.expressions.first();
+				var antecedent = firstExp.features.first();
+				var consequent = secondExp.features.first();
+				
+				%]ctc[%=i%]=[%=antecedent.id%]:[%=consequent.id%]
+				[%
+				excludes++;
+			}
+			else{
+				var antecedent = firstExp.features.first();
+				var consequent = firstExp.features.last();
+				
+				%]ctc[%=i%]=[%=antecedent.id%]:[%=consequent.id%]*
+				[%
+				requires++;
+			}
+			
+			i++;
+		}
+		
+		%]requiresCtcsNum=[%=requires%]
+		[%
+		%]excludesCtcsNum=[%=excludes%]
+		[%
+	}
+	
+	operation setCMCs(){
+		var i = 0;
+		var cmcs = FMCoCo!CrossModelConstraint.all();
+		var forces = 0;
+		var prohibits = 0;
+		
+		%]cmcsNum=[%=cmcs.size()%]
+		[%
+		
+		for(c in cmcs) {
+			var expressions = c.expressions;
+			var firstExp = expressions.first();
+			
+			if(firstExp.expressions.size() <> 0) {
+				var secondExp = firstExp.expressions.first();
+				var antecedent = firstExp.features.first();
+				var consequent = secondExp.features.first();
+				
+				%]cmc[%=i%]=[%=antecedent.id%]:[%=consequent.id%]
+				[%
+				prohibits++;
+			}
+			else{
+				var antecedent = firstExp.features.first();
+				var consequent = firstExp.features.last();
+				
+				%]cmc[%=i%]=[%=antecedent.id%]:[%=consequent.id%]*
+				[%
+				forces++;
+			}
+			
+			i++;
+		}
+		
+		%]forcesCmcsNum=[%=forces%]
+		[%
+		%]prohibitsCmcsNum=[%=prohibits%]
+		[%
+	}
+%]

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="CoCo" default="main" basedir=".">
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/tasks.xml"/>
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/emf/tasks.xml"/>
+
+	<echo>=== TRANSFORMING MODELS ===</echo>
+	<!--<epsilon.emf.register file="../../metamodels/CoCo2Afm.ecore" />-->
+	<epsilon.emf.register file="../../metamodels/coCoMM.ecore" />
+
+	<echo>[ant] Registering CoCo2Afm model</echo>
+	<epsilon.emf.loadModel 
+		name="FMFaMa" 
+		aliases="FMFaMa" 
+		modelFile="../../models/fama/${afm2cocoModel}" 
+		metamodelUri="http://www.coco.edu/afm2coco/Afm2CoCo" 
+		read="true" store="false" />
+
+	<echo>[ant] Registering CoCo model</echo>
+	<epsilon.emf.loadModel 
+		name="FMCoCo" 
+		modelFile="../../models/fama/${cocoModel}" 
+		metamodelUri="http://www.example.org/coCoMM" 
+		read="true" store="true" />
+
+	<target name="main">
+		<echo>[ant] Starting fama2cocoM2M transformation</echo>
+		<epsilon.etl src="../../transformations/m2m/fama2cocoM2M.etl">
+			<model ref="FMFaMa"/>
+			<model ref="FMCoCo"/>
+		</epsilon.etl>
+		<epsilon.storeModel model="FMCoCo"/>
+		<echo>[ant] Finished</echo>
+	</target>
+
+</project>

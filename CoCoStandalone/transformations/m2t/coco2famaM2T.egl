@@ -1,0 +1,252 @@
+[%
+
+//---------------------------------------------------------
+// Description
+//---------------------------------------------------------
+
+/**
+ * This EGL transfomation is responsible of transforming the CoCo
+ * model to a FaMa model. 
+ */
+ 
+%]
+%Relationships
+[%
+setFSGRelationships();
+setFMRelationships();
+%]
+
+%Attributes
+[%
+setAttributes();
+%]
+
+%Constraints
+[%
+setCTConstraints();
+setCMConstraints();
+%]
+
+[%
+
+//---------------------------------------------------------
+// Operations
+//---------------------------------------------------------
+
+	/**
+	 * Operation responsible of creating the FSG line
+	 * with mandatory relations to its FMs roots.
+	 * @post: the FaMa FSG is created with mandatory
+	 * relations to FMs roots. 
+	 */
+	operation setFSGRelationships(){
+		var fms = FMCoCo!FeatureModel.all();
+		
+		%]FSG :[%
+		for(fm in fms) {
+			%] [%=fm.root.id%][%
+		}
+		%]; 
+		[%
+	}
+	
+	/**
+	 * Starts a recursive definition of FMs relations.
+	 * FMs names are differentiated by a feature ID 
+	 * that includes the FM root name as starting key.
+	 * E.g.: root1_feature1
+	 * @post: al tree constraints relations are created
+	 * for each FM in the FaMa format.
+	 */
+	operation setFMRelationships() {
+		var fms = FMCoCo!FeatureModel.all();
+		
+		for(fm in fms) {
+			fm.root.setFMRelationshipsRecursive();
+		}
+	}
+	
+	/**
+	 * The operation is called over a feature. All feature's
+	 * tree constraints are collected and translated 
+	 * to FaMa format. Depending on the TC type the
+	 * alternative, or, or and operation is called.
+	 * @post: tree constraints of a non-leaf feature
+	 * are created in the FaMa format.
+	 */
+	operation FMCoCo!Feature setFMRelationshipsRecursive() {
+		var treeConstraints = self.treeConstraints;
+		
+		if(treeConstraints.size() > 0) {
+			%][%=self.id%] :[%
+			for(tc in treeConstraints) {
+				var children = tc.children;
+				
+				if(tc.type == FMCoCo!TreeConstraintType#Alternative){
+					setAlternativeFeatures(children);
+				}
+				
+				else if(tc.type == FMCoCo!TreeConstraintType#Or){
+					setOrFeatures(children);
+				}
+				
+				else if(tc.type == FMCoCo!TreeConstraintType#And){
+					setAndFeatures(children);
+				}
+			}
+			%];
+			[%
+		}
+		
+		//Call to the recursive operation
+		for(tc in treeConstraints) {
+			var children = tc.children;
+			for(c in children) {
+				c.setFMRelationshipsRecursive();
+			}
+		}
+	}
+
+	/**
+	 * Operation responsible of creating alternative 
+	 * tree constraints where multiple siblings are
+	 * involved.
+	 * @param: ordered set with siblings (Features)
+	 * @post: an alternatiive relation among siblings 
+	 * is created in the FaMa format.
+	 */
+	operation setAlternativeFeatures(siblings : OrderedSet){
+		%] [1,1]{[%
+		for(s in siblings) {
+			%] [%=s.id%][%
+		}
+		%] }[%
+	}
+	
+	/**
+	 * Operation responsible of creating or tree 
+	 * constraints where multiple siblings are involved.
+	 * @param: ordered set with siblings (Features)
+	 * @post: an or relation among siblings is created 
+	 * in the FaMa format.
+	 */
+	operation setOrFeatures(siblings : OrderedSet){
+		%] [1,[%=siblings.size()%]]{[%
+		for(s in siblings) {
+			%] [%=s.id%][%
+		}
+		%] }[%
+	}
+	
+	/**
+	 * Operation responsible of creating and (mandatory 
+	 * or optional) tree constraints for multiple siblings.
+	 * @param: ordered set with siblings (Features)
+	 * @post: a mandatory or optional relation is created 
+	 * in the FaMa format.
+	 */
+	operation setAndFeatures(siblings : OrderedSet){
+		for(s in siblings) {
+			
+			//Mandatory
+			if(s.mandatory == true) {
+				%] [%=s.id%][%
+			}
+			
+			//Optional
+			else{
+				%] [[%=s.id%]][%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of setting feature attributes.
+	 * Integer attributes are created with min, max, and
+	 * default values. Last value of the FaMa format 
+	 * definition is not considered.
+	 * @post: all feature attributes are defined in the
+	 * FaMa format.
+	 */
+	operation setAttributes() {
+		var features = FMCoCo!Feature.all();
+		
+		for(f in features){
+			var featureAttributes = f.featureAttributes;
+			
+			for(a in featureAttributes){
+				%][%=f.id%].[%=a.attrType.id%]: Integer[[%=a.minValue%] to [%=a.maxValue%]], [%=a.defaultValue%], 0;
+				[%
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of setting all cross-tree 
+	 * constraints. Only excludes (p implies not q) and
+	 * requires (p implies q) relations are considered.
+	 * @post: all CTCs (requires or excludes) are 
+	 * created in the FaMa format.
+	 */
+	operation setCTConstraints(){
+		var ctcs = FMCoCo!CrossTreeConstraint.all();
+		
+		for(ctc in ctcs){
+			var expressionCTC1 = ctc.expressions[0];
+			var featureCTC1 = expressionCTC1.features;
+			
+			if(expressionCTC1.op == FMCoCo!CTConstraintType#`implies` 
+				and featureCTC1.size() >= 1){
+			
+				//Excludes
+				if(expressionCTC1.expressions.size() > 0 and 
+					expressionCTC1.expressions[0].op == FMCoCo!CTConstraintType#`not`){
+					
+					var featureCTC2 = expressionCTC1.expressions[0].features;
+					%][%=featureCTC1[0].id%] EXCLUDES [%=featureCTC2[0].id%];
+					[%
+				}
+				
+				//Requires
+				else{
+					%][%=featureCTC1[0].id%] REQUIRES [%=featureCTC1[1].id%];
+					[%
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Operation responsible of setting all cross-model 
+	 * constraints. Only excludes (p implies not q) and
+	 * requires (p implies q) relations are considered.
+	 * @post: all CMCs (requires or excludes) are 
+	 * created in the FaMa format.
+	 */
+	operation setCMConstraints(){
+		var cmcs = FMCoCo!CrossModelConstraint.all();
+		
+		for(cmc in cmcs){
+			var expressionCMC1 = cmc.expressions[0];
+			var featureCMC1 = expressionCMC1.features;
+			
+			if(expressionCMC1.op == FMCoCo!CMConstraintType#`implies` 
+				and featureCMC1.size() >= 1){
+			
+				//Excludes
+				if(expressionCMC1.expressions.size() > 0 and
+					expressionCMC1.expressions[0].op == FMCoCo!CMConstraintType#`not`){
+					var featureCMC2 = expressionCMC1.expressions[0].features;
+					%][%=featureCMC1[0].id%] EXCLUDES [%=featureCMC2[0].id%];
+					[%
+				}
+				
+				//Requires
+				else{
+					%][%=featureCMC1[0].id%] REQUIRES [%=featureCMC1[1].id%];
+					[%
+				}
+			}
+		}
+	}
+%]

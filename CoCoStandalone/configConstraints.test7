@@ -1,0 +1,21 @@
+Attribute_Types {
+	Availability{
+		int minValue;
+		int maxValue;
+		int defaultValue;
+	}
+	
+	Cost{
+		int minValue;
+		int maxValue;
+		int defaultValue;
+	}
+	
+	
+}
+
+Solution_Constraints {
+	
+	optimization COSTOSSS: minimize Cost;
+	optimization TEIMPOSSS: maximize Availability;
+}

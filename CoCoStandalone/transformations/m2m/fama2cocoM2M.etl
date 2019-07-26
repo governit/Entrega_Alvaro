@@ -1,0 +1,217 @@
+//---------------------------------------------------------
+// Description
+//---------------------------------------------------------
+
+/**
+ * This ETL transfomation is responsible of transforming 
+ * FaMa models to CoCo models. Thus, the possible
+ * resulting CoCo elements are: 
+ *	1. Feature Model
+ *	2. Feature
+ *	3. Tree Constraint
+ *	4. Cross Tree Constraint
+ *	5. CT Constraint Expression
+ */
+
+
+//---------------------------------------------------------
+// Rules
+//---------------------------------------------------------
+
+/**
+ * Rule for transforming the feature model tag from 
+ * FaMa to a CoCo feature model. Name and root
+ * attributes are set. Rules are recursively transformed. 
+ */
+rule FM2FM
+	transform m : FMFaMa!FM
+	to n : FMCoCo!FeatureModel {
+		var coco = FMCoCo!CoCo.all.first();
+		
+		if(coco == null){
+			coco = FMCoCo!CoCo.createInstance();
+		}
+		
+		var tamanio = m.relationships.size();
+		var tamanio2 = m.features.size();
+
+		var fms = FMCoCo!FeatureModel.all();
+		var attributes = m.attributes;
+		var crossTreeConstraints = m.crossTreeConstraints;
+		var relationships = m.relationships;
+		var root = m.relationships.first();
+		var rooTC = root.treeConstraints;
+		
+		n.name = root.parent.name + fms.size();
+		n.root = createFeature(root.parent, true, true);
+		
+		for(tc in rooTC) {
+			n.root.treeConstraints.add(tc.equivalent());
+		}
+		
+		for(ctc in crossTreeConstraints) {
+			n.ctConstraints.add(ctc.equivalent());
+		}
+		
+		coco.featureModels.add(n);
+	}
+
+rule MandatoryTreeConstraint2TreeConstraint
+	transform m : FMFaMa!MandatoryTreeConstraint
+	to n : FMCoCo!TreeConstraint {
+		var feature = createFeature(m.feature, true, true);
+		n.type = FMCoCo!TreeConstraintType#And;
+		createTreeConstraintsPerFeature(feature);
+		n.children.add(feature);
+	}
+
+rule OptionalTreeConstraint2TreeConstraint
+	transform m : FMFaMa!OptionalTreeConstraint
+	to n : FMCoCo!TreeConstraint {
+		var feature = createFeature(m.feature, true, false);
+		n.type = FMCoCo!TreeConstraintType#And;
+		createTreeConstraintsPerFeature(feature);
+		n.children.add(feature);
+	}
+
+rule OrAlternativeTreeConstraint2TreeConstraint
+	transform m : FMFaMa!OrAlternativeTreeConstraint
+	to n : FMCoCo!TreeConstraint {
+		if(m.max == 1) {
+				n.type = FMCoCo!TreeConstraintType#Alternative;
+		}
+		else {
+			n.type = FMCoCo!TreeConstraintType#Or;
+		}
+		
+		for(f in m.features) {
+			var feature = createFeature(f, true, false);
+			createTreeConstraintsPerFeature(feature);
+			n.children.add(feature);
+		}
+	}
+
+rule CrossTreeConstraint2CrossTreeConstraint
+	transform m : FMFaMa!CrossTreeConstraint
+	to n : FMCoCo!CrossTreeConstraint {
+		var feature1 = FMCoCo!Feature.all.select(x|x.id == getFeatureId(FMCoCo!FeatureModel.all.last().name, m.feature1.name)).first();
+		var feature2 = FMCoCo!Feature.all.select(x|x.id == getFeatureId(FMCoCo!FeatureModel.all.last().name, m.feature2.name)).first();
+		var expression1 = new FMCoCo!CTConstraintExpression();
+		expression1.op = FMCoCo!CTConstraintType#`implies`;
+
+		if(m.type == "EXCLUDES") {
+			var expression2 = new FMCoCo!CTConstraintExpression();
+			expression2.op = FMCoCo!CTConstraintType#`not`;
+			expression2.features.add(feature2);
+			
+			expression1.features.add(feature1);
+			expression1.expressions.add(expression2);
+		}
+		else {
+			expression1.features.add(feature1);
+			expression1.features.add(feature2);
+		}
+		
+		n.expressions.add(expression1);
+	}
+	
+//---------------------------------------------------------
+// Operations
+//---------------------------------------------------------
+
+operation Any createFeature(feature : FMFaMa!Feature, abst : Boolean, mandatory : Boolean) : FMCoCo!Feature {
+	var newFeature = new FMCoCo!Feature();
+	
+	newFeature.id = getFeatureId(getFeatureModelName(), feature.name);
+	
+	newFeature.name = feature.name;
+	newFeature.featureModel = FMCoCo!FeatureModel.all.select(x|x.name == getFeatureModelName()).first();
+	newFeature.`abstract` = abst;
+	newFeature.mandatory = mandatory;
+	
+	return newFeature;
+}
+
+operation Any createTreeConstraintsPerFeature(feature : FMCoCo!Feature) {
+	var featureRelationship = FMFaMa!ParentChildConstraint.all.select(x|x.parent.name == feature.name).first();
+	
+	if(featureRelationship <> null) {
+		var featureTC = featureRelationship.treeConstraints;
+		for(tc in featureTC){
+			feature.treeConstraints.add(tc.equivalent());
+		}
+	}
+	else {
+		feature.`abstract` = false;
+		createAttributesPerFeature(feature);
+	}
+}
+
+operation Any createAttributesPerFeature(feature : FMCoCo!Feature) {
+	var featureAttributes = FMFaMa!FeatureAttribute.all.select(x|x.feature.name == feature.name);
+	
+	for(fa in featureAttributes){
+		var newFeatureAttribute = new FMCoCo!FeatureAttribute();
+			
+		var attributeType = fa.attributeType;
+		var cocoAttributeType = FMCoCo!AttributeType.all.select(x|x.name == attributeType).first();
+		
+		if(cocoAttributeType == null) {
+			var coco = FMCoCo!CoCo.all.first();
+			var newAttributeType = new FMCoCo!AttributeType();
+			
+			newAttributeType.id = attributeType;
+			newAttributeType.name = attributeType;
+			//TODO: verify attribute data type
+			newAttributeType.dataType = FMCoCo!DataType#int;
+			
+			coco.attributeTypes.add(newAttributeType);
+			cocoAttributeType = newAttributeType;
+		}
+		
+		newFeatureAttribute.minValue = "" + fa.minValue;
+		newFeatureAttribute.maxValue = "" + fa.maxValue;
+		newFeatureAttribute.defaultValue = "" + fa.defaultValue;
+		newFeatureAttribute.attrType = cocoAttributeType;
+		
+		feature.featureAttributes.add(newFeatureAttribute);
+	}
+}
+
+/**
+ * Operation for obtaining the feature model name
+ * which is equal to the root feature name.
+ * @return: feature model name - String
+ */
+operation Any getFeatureModelName() : String {
+	var fms = FMCoCo!FeatureModel.all();
+	var root = FMFaMa!ParentChildConstraint.all.first().parent.name + fms.size(); 
+	return root;
+}
+
+/**
+ * Operation for obtaining the feature model name
+ * which is equal to the root feature name.
+ * @return: feature model name - String
+ */
+operation Any getFeatureModelName() : String {
+	var root = FMFaMa!Feature.all.first(); 
+	return root.name;
+}
+
+/**
+ * Operation for creating the ID of a feature model
+ * element according to the feature model name and the
+ * feature name received by parameter.
+ * The generated ID is in the form of "FeatureModelName_FeatureName".
+ * @param: featureModelName - String with the feature model name
+ * @param: featureName - String with the feature name
+ * @return: feature ID - String
+ */
+operation getFeatureId(featureModelName : String, featureName : String) : String {
+
+if(featureName == null){
+return featureModelName + '_NaN';
+}
+	return featureModelName + '_' + featureName.trim();
+}

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="CoCo" default="main" basedir=".">
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/tasks.xml"/>
+	<taskdef resource="org/eclipse/epsilon/workflow/tasks/emf/tasks.xml"/>
+
+	<echo>=== TRANSFORMING MODELS ===</echo>
+	<epsilon.emf.register file="../../metamodels/coCoMM.ecore" />
+
+	<echo>[ant] Registering CoCo model</echo>
+	<epsilon.emf.loadModel 
+		name="FMCoCo" 
+		modelFile="../../models/fama/${cocoModel}" 
+		metamodelUri="http://www.example.org/coCoMM" 
+		read="true" store="true" />
+
+	<target name="main">
+		<echo>[ant] Starting cmcGenerationM2M transformation</echo>
+		<epsilon.eol src="../../transformations/m2m/cmcGenerationM2M.eol">
+			<model ref="FMCoCo"/>
+		</epsilon.eol>
+		<epsilon.storeModel model="FMCoCo"/>
+		
+		<echo>[ant] Starting coco2famaM2T transformation</echo>
+		<epsilon.egl src="../../transformations/m2t/coco2famaM2T.egl" 
+			target="../../models/fama/${famaValidationModel}">
+			<model ref="FMCoCo"/>
+		</epsilon.egl>
+		<echo>[ant] Finished</echo>
+	</target>
+
+</project>
